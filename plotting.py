@@ -1,36 +1,43 @@
-import xarray as xr
-import matplotlib.pyplot as plt
 import numpy as np
-import math
+import matplotlib.pyplot as plt
+import itertools
 
-def bar_by_sample(avg_ds, comp_sample1="SLRS-6_1", comp_sample2="SPS-SW2 10%_1"):
+def bar_by_sample(avg_ds, comp_samples=["SLRS-6_1", "SPS-SW2 10%_1"]):
     """
     Create a figure with subplots comparing species abundances for each sample in avg_ds.
     Each subplot is a grouped bar chart showing:
-      - The current sample (left-shifted)
-      - Comparison sample 1 (centered)
-      - Comparison sample 2 (right-shifted)
+      - The current sample (plotted as the left-most bar)
+      - Each comparison sample (in the order provided in comp_samples)
+    Error bars for each species are applied using the values contained in the 'error'
+    variable of the dataset.
     
     Parameters
     ----------
     avg_ds : xarray.Dataset
         The dataset containing your data. It must have:
-          - A coordinate 'sample_name' (used for looping over samples)
-          - A coordinate 'species' (used for x-axis labels)
-        The data variable(s) are assumed to be directly accessible via .values.
-    comp_sample1 : str, optional
-        The name of the first comparison sample (default is "SLRS-6_1").
-    comp_sample2 : str, optional
-        The name of the second comparison sample (default is "SPS-SW2 10%_1").
+          - A coordinate 'sample_name' (used for looping over samples) in the 'Concentration_mM' variable.
+          - A coordinate 'species' (used for x-axis labels) in the 'Concentration_mM' variable.
+          - Two variables:
+              'Concentration_mM': containing concentration data.
+              'error': containing error values for each species.
+    comp_samples : list of str, optional
+        A list of sample names to use for comparison (default is ["SLRS-6_1", "SPS-SW2 10%_1"]).
     
     Returns
     -------
     fig : matplotlib.figure.Figure
         The figure containing the subplots.
     """
-    # Get all sample names from the dataset
-    sample_names = avg_ds.sample_name.values
+    # Access the concentration and error variables
+    conc = avg_ds['Concentration_mM']
+    errors = avg_ds['error']
+    
+    # Remove the error sample (if it exists) from the list of samples to plot
+    sample_names = [s for s in conc.sample_name.values if s != "error"]
     n_samples = len(sample_names)
+    
+    # Extract error values (assumed to correspond to each species)
+    error = errors.values
     
     # Create a square-ish grid for subplots
     ncols = int(np.ceil(np.sqrt(n_samples)))
@@ -39,35 +46,49 @@ def bar_by_sample(avg_ds, comp_sample1="SLRS-6_1", comp_sample2="SPS-SW2 10%_1")
     # Create the figure and an array of axes
     fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 4))
     
-    # Flatten axes array for easy iteration (if only one subplot, make it a list)
+    # Flatten the axes array for easy iteration (if only one subplot, wrap it in a list)
     if n_samples == 1:
         axes = [axes]
     else:
         axes = axes.flatten()
     
     # Extract species names and create x positions for the bars
-    species = avg_ds.species.values
+    species = conc.species.values
     x = np.arange(len(species))
     bar_width = 0.25  # width for each bar
     
-    # Pre-extract the comparison samples' data
-    data_comp1 = avg_ds.sel(sample_name=comp_sample1).values
-    data_comp2 = avg_ds.sel(sample_name=comp_sample2).values
+    # Determine the total number of bars in each group:
+    # current sample + len(comp_samples)
+    total_bars = 1 + len(comp_samples)
+    # Calculate offsets so that the left-most bar (current sample) is at:
+    #   x + ( - (total_bars - 1)/2 * bar_width )
+    # and subsequent bars are spaced by bar_width.
+    offsets = [ -((total_bars - 1) / 2) * bar_width + i * bar_width for i in range(total_bars) ]
     
-    # Loop over each sample and plot its grouped bar chart in a subplot
+    # Define colors for the bars.
+    # We'll use a fixed color for the current sample and cycle through colors for comparisons.
+    current_color = 'skyblue'
+    comp_color_cycle = itertools.cycle(['salmon', 'limegreen', 'orange', 'violet'])
+    
+    # Loop over each sample (excluding the error sample) and plot its grouped bar chart
     for idx, sample in enumerate(sample_names):
         ax = axes[idx]
         
-        # Extract the data for the current sample
-        curr_data = avg_ds.sel(sample_name=sample).values
+        # Extract the concentration data for the current sample
+        curr_data = conc.sel(sample_name=sample).values
         
-        # Plot three sets of bars:
-        # - current sample: left-shifted
-        # - comparison sample 1: centered
-        # - comparison sample 2: right-shifted
-        ax.bar(x - bar_width, curr_data, width=bar_width, label=str(sample), color='skyblue')
-        ax.bar(x, data_comp1, width=bar_width, label=comp_sample1, color='salmon')
-        ax.bar(x + bar_width, data_comp2, width=bar_width, label=comp_sample2, color='limegreen')
+        # Plot the current sample bar at its offset
+        ax.bar(x + offsets[0], curr_data, width=bar_width, label=str(sample),
+               color=current_color, yerr=error, capsize=3)
+        
+        # Plot each comparison sample at its respective offset
+        for i, comp_sample in enumerate(comp_samples):
+            comp_data = conc.sel(sample_name=comp_sample).values
+            color = next(comp_color_cycle)
+            ax.bar(x + offsets[i+1], comp_data, width=bar_width, label=comp_sample,
+                   color=color, yerr=error, capsize=3)
+        # Reset the color cycle for the next subplot
+        comp_color_cycle = itertools.cycle(['salmon', 'limegreen', 'orange', 'violet'])
         
         # Customize each subplot
         ax.set_xlabel("Species")
@@ -85,35 +106,36 @@ def bar_by_sample(avg_ds, comp_sample1="SLRS-6_1", comp_sample2="SPS-SW2 10%_1")
     return fig
 
 
-def bar_by_species(ds, var_name=None, highlight_samples=None):
+def bar_by_species(ds, var_name="Concentration_mM", comp_samples=None):
     """
     Plot bar charts for each species from an xarray dataset and return the figure.
+    
+    This function expects the dataset to have two coordinates: 'sample_name' and 'species', and
+    two variables:
+      - 'Concentration_mM': the concentration data with dimensions ('species', 'sample_name')
+      - 'error': the error values (with dimensions matching 'Concentration_mM')
     
     Parameters
     ----------
     ds : xarray.Dataset
-        A dataset with two coordinates: 'sample_name' and 'species'. It should contain
-        a data variable with dimensions ('species', 'sample_name').
+        A dataset with coordinates 'sample_name' and 'species' and the variables 'Concentration_mM'
+        and 'error'.
     var_name : str, optional
-        The name of the variable in ds to plot. If not provided, the first data variable is used.
-    highlight_samples : list of str, optional
-        List of sample_name values to highlight. Bars corresponding to these sample names
-        will be drawn in a different color.
+        The name of the variable in ds to plot for concentrations. Default is 'Concentration_mM'.
+    comp_samples : list of str, optional
+        List of sample_name values to highlight as comparison samples. Bars corresponding to these
+        sample names will be drawn in a different color. If not provided, no samples are highlighted.
     
     Returns
     -------
     fig : matplotlib.figure.Figure
         The figure object containing the subplots.
     """
-    # If no variable name is provided, pick the first data variable.
-    if var_name is None:
-        var_name = list(ds.data_vars.keys())[0]
+    # If no comparison samples are provided, default to an empty list.
+    if comp_samples is None:
+        comp_samples = []
     
-    # If no samples to highlight are provided, default to an empty list.
-    if highlight_samples is None:
-        highlight_samples = []
-    
-    # Get the list of species.
+    # Get the list of species from the dataset coordinates.
     species_list = ds.coords['species'].values
     n_species = len(species_list)
     
@@ -123,18 +145,21 @@ def bar_by_species(ds, var_name=None, highlight_samples=None):
     for i, species in enumerate(species_list):
         ax = axes[i, 0]
         
-        # Select data for the current species.
-        data = ds.sel(species=species)
+        # Select the concentration data for the current species.
+        # Data is assumed to have dimensions ('sample_name',) after selecting a specific species.
+        data = ds[var_name].sel(species=species)
+        # Also select the error data for the current species.
+        error_data = ds['error'].sel(species=species).values
         
-        # Extract sample names and their corresponding values.
+        # Extract the sample names and their corresponding values.
         sample_names = data.coords['sample_name'].values
         values = data.values
         
-        # Set bar colors: highlight the bar if its sample_name is in the list.
-        colors = ['red' if sample in highlight_samples else 'blue' for sample in sample_names]
+        # Determine bar colors: if a sample is in comp_samples, highlight it in red; otherwise, use blue.
+        colors = ['red' if sample in comp_samples else 'blue' for sample in sample_names]
         
-        # Create the bar chart.
-        ax.bar(sample_names, values, color=colors)
+        # Create the bar chart for the current species with error bars.
+        ax.bar(sample_names, values, color=colors, yerr=error_data, capsize=3)
         ax.set_title(f"Species: {species}")
         ax.set_xlabel("Sample Name")
         ax.set_ylabel(var_name)

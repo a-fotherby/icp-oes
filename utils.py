@@ -231,3 +231,91 @@ def match_sample_name(ds: xr.Dataset, labels, threshold=0.6) -> xr.Dataset:
 
     # Return the subset of the dataset based on the matching sample names.
     return ds.sel(sample_name=matching_samples)
+
+import re
+
+def reorder_sample_coord(xarray_obj):
+    """
+    Reorder the coordinate labels along 'sample_name' in the given xarray
+    DataArray or Dataset. The order is:
+      1. Single capital letters (e.g., 'A', 'B', ...) sorted alphanumerically.
+      2. A capital letter followed by digits (e.g., 'A1', 'B2', ...) sorted first
+         by the letter and then by the numeric value.
+      3. All other labels sorted alphanumerically.
+
+    Parameters:
+      xarray_obj (xarray.DataArray or xarray.Dataset): The object containing the
+                                                        'sample_name' coordinate.
+    
+    Returns:
+      xarray.DataArray or xarray.Dataset: A new object with the 'sample_name' coordinate
+                                           reordered as specified.
+    """
+    # Get the 'species_name' coordinate labels.
+    species_labels = list(xarray_obj.coords['sample_name'].values)
+    
+    # Define regex patterns.
+    pattern_single = re.compile(r'^[A-Z]$')
+    pattern_letter_number = re.compile(r'^[A-Z]\d+$')
+    
+    def sort_key(label):
+        """
+        Returns a tuple key for sorting:
+          - Group 0: Single capital letters.
+          - Group 1: A capital letter followed by digits. Sorted by the letter then the numeric value.
+          - Group 2: All other labels.
+        """
+        if pattern_single.match(label):
+            return (0, label)
+        elif pattern_letter_number.match(label):
+            # Extract the letter and the numeric part.
+            letter = label[0]
+            number = int(label[1:])
+            return (1, letter, number)
+        else:
+            return (2, label)
+    
+    # Sort the labels using the custom sort key.
+    sorted_labels = sorted(species_labels, key=sort_key)
+    
+    # Reindex the object with the new order.
+    return xarray_obj.reindex(sample_name=sorted_labels)
+
+
+def drop_labels_by_suffix(ds, target_suffixes, dim, inplace=False):
+    """
+    Drop coordinate labels from an xarray Dataset along a specified dimension if the last part of the label,
+    when split by an underscore, matches any of the provided target_suffixes.
+
+    Parameters:
+        ds (xr.Dataset): The xarray Dataset to process.
+        target_suffixes (list of str): A list of suffixes to match. Coordinate labels ending with
+                                       '_{suffix}' for any suffix in target_suffixes will be dropped.
+        dim (str): The dimension along which to drop labels.
+        inplace (bool): If True, a warning is printed because xarray objects are immutable.
+                        The function always returns a new Dataset.
+
+    Returns:
+        xr.Dataset: A new Dataset with the specified coordinate labels dropped.
+    """
+    # Allow a single string to be provided by converting it to a list
+    if isinstance(target_suffixes, str):
+        target_suffixes = [target_suffixes]
+
+    # Extract the coordinate labels along the specified dimension
+    coord_values = ds.coords[dim].values
+
+    # Identify labels to drop: check if the last underscore-separated part of the label matches any suffix
+    drop_labels = [
+        label for label in coord_values
+        if isinstance(label, str) and label.split('_')[-1] in target_suffixes
+    ]
+
+    # Drop the identified labels using drop_sel
+    new_ds = ds.drop_sel({dim: drop_labels})
+    
+    if inplace:
+        # Inform the user that xarray objects are immutable
+        print("Warning: xarray datasets are immutable; returning a new dataset even though inplace=True was requested.")
+
+    return new_ds
