@@ -1,4 +1,5 @@
 import xarray as xr
+import numpy as np
 
 def append_stats_to_dataarray(dataarray: xr.DataArray, sample_subset: list, label_prefix: str) -> xr.DataArray:
     """
@@ -39,8 +40,6 @@ def append_stats_to_dataarray(dataarray: xr.DataArray, sample_subset: list, labe
     
     return updated_dataarray
 
-import xarray as xr
-import numpy as np
 
 def append_percentage_difference(dataarray: xr.DataArray,
                                  certified_values: dict,
