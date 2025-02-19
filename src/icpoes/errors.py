@@ -89,8 +89,10 @@ def append_percentage_difference(dataarray: xr.DataArray,
         # Extract the element symbol by removing the '_average' suffix.
         element_symbol = species_label.replace('_average', '')
         if element_symbol not in certified_values:
-            raise ValueError(f"Certified value for element '{element_symbol}' not found in the provided dictionary.")
-        cert_values_list.append(certified_values[element_symbol])
+            print(f"Certified value for element '{element_symbol}' not found in the provided dictionary.")
+            cert_values_list.append(np.nan)
+        else:
+            cert_values_list.append(certified_values[element_symbol])
     
     # Create a DataArray of certified values aligned with the species coordinate.
     cert_da = xr.DataArray(cert_values_list, coords={'species': species_labels}, dims=['species'])

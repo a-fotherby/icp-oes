@@ -213,3 +213,31 @@ def import_raw(file_path):
     ds = move_unit_to_concentration(ds)  # Move 'Unit' into 'Concentration' metadata and delete it.
     ds = sanitize_netcdf_names(ds)  # Sanitize variable names for netCDF compatibility.
     return ds
+
+import argparse
+from unit_conv import convert_units
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Import raw data, convert units, and save as a NetCDF file."
+    )
+    parser.add_argument(
+        "file_path", 
+        help="Path to the input CSV file (e.g., /path/to/data.csv)"
+    )
+    parser.add_argument(
+        "output_name", 
+        help="Name of the output NetCDF file (e.g., output.nc)"
+    )
+    args = parser.parse_args()
+
+    # Import the raw dataset from the file
+    ds = import_raw(args.file_path)
+    # Convert the dataset units
+    ds = convert_units(ds)
+    # Save the dataset to a NetCDF file
+    ds.to_netcdf(args.output_name)
+    print(f"Data processed and saved to {args.output_name}")
+
+if __name__ == "__main__":
+    main()

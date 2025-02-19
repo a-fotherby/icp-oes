@@ -15,7 +15,7 @@ A Python-based data processing and analysis toolkit for handling and visualizing
 This project provides a set of tools for processing, analyzing, and visualizing data related to ICPOES (Inductively Coupled Plasma Optical Emission Spectroscopy). It includes functions for data import, unit conversion, standard checking, error handling, and graphical representation of results.
 
 ## Features
-- **Data Import:** Import ICPOES data for processing.
+- **Data Import:** Import ICP-OES data for processing.
 - **Standard Checking:** Validate data against predefined standards.
 - **Error Handling:** Detect and manage errors in data processing.
 - **Plotting:** Generate visual representations of data.
