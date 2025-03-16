@@ -310,7 +310,7 @@ class ConcentrationAnalyser:
         error_per_cs = xr.apply_ufunc(np.fmax, error_from_pct, 2 * calib_ds['calibration_sd_ppm'])
         
         # Only consider check_std values where the absolute percentage difference is less than 5%.
-        valid_mask = abs(pct_diff) < 5
+        valid_mask = abs(pct_diff) < 10
         error_per_cs = error_per_cs.where(valid_mask, np.nan)
         
         # For each species, take the maximum error across check_std (ignoring NaNs).
